@@ -13,7 +13,7 @@ name: ci
 on: [push, pull_request]
 jobs:
   ci:
-    uses: chirag127/oriz-workflows/.github/workflows/ci-astro-site.yml@v1
+    uses: chirag127/workflows/.github/workflows/ci-astro-site.yml@v1
     secrets: inherit
 ```
 

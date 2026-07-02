@@ -3,7 +3,7 @@
 # Downstream repo pins with:
 #   jobs:
 #     ci:
-#       uses: chirag127/oriz-workflows/.github/workflows/ci-astro-api.yml@v1
+#       uses: chirag127/workflows/.github/workflows/ci-astro-api.yml@v1
 #       secrets: inherit
 #
 # Runs Dagger `call ci` for build + JSON schema validation.

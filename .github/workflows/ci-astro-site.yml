@@ -3,7 +3,7 @@
 # Downstream repo pins with:
 #   jobs:
 #     ci:
-#       uses: chirag127/oriz-workflows/.github/workflows/ci-astro-site.yml@v1
+#       uses: chirag127/workflows/.github/workflows/ci-astro-site.yml@v1
 #       secrets: inherit
 #
 # Runs Dagger `call ci` — lint + typecheck + test + build in parallel.
