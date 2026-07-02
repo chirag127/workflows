@@ -47,12 +47,27 @@ export class AstroApi {
     return this.base(source).withExec(["pnpm", "run", "build"]).directory("/src/dist")
   }
 
-  /** Full CI: lint + typecheck in parallel, then build. No tests (API repos are data-first). */
+  @func()
+  async megalint(source: Directory): Promise<string> {
+    return dag
+      .container()
+      .from("ghcr.io/oxsecurity/megalinter:v8")
+      .withMountedDirectory("/tmp/lint", source)
+      .withWorkdir("/tmp/lint")
+      .withEnvVariable("DEFAULT_WORKSPACE", "/tmp/lint")
+      .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,JSON_JSONLINT,YAML_YAMLLINT,MARKDOWN_MARKDOWNLINT")
+      .withExec(["/entrypoint.sh"])
+      .stdout()
+      .catch(err => { throw new Error("megalint: " + err.message) })
+  }
+
+  /** Full CI: lint + typecheck + megalint in parallel, then build. No tests (API repos are data-first). */
   @func()
   async ci(source: Directory): Promise<string> {
     await Promise.all([
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
+      this.megalint(source).catch(err => { throw new Error(`megalint: ${err.message}`) }),
     ])
     await this.build(source)
     return "ok"

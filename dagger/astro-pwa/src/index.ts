@@ -47,11 +47,26 @@ export class AstroPwa {
   }
 
   @func()
+  async megalint(source: Directory): Promise<string> {
+    return dag
+      .container()
+      .from("ghcr.io/oxsecurity/megalinter:v8")
+      .withMountedDirectory("/tmp/lint", source)
+      .withWorkdir("/tmp/lint")
+      .withEnvVariable("DEFAULT_WORKSPACE", "/tmp/lint")
+      .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,CSS_STYLELINT,HTML_HTMLHINT,MARKDOWN_MARKDOWNLINT,JSON_JSONLINT,YAML_YAMLLINT")
+      .withExec(["/entrypoint.sh"])
+      .stdout()
+      .catch(err => { throw new Error("megalint: " + err.message) })
+  }
+
+  @func()
   async ci(source: Directory): Promise<string> {
     await Promise.all([
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
       this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
+      this.megalint(source),
     ])
     await this.build(source)
     return "ok"

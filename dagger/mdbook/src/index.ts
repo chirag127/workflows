@@ -37,8 +37,25 @@ export class Mdbook {
 
   @func()
   async ci(source: Directory): Promise<string> {
-    await this.lint(source)
-    await this.build(source)
+    await Promise.all([
+      this.lint(source),
+      this.build(source),
+      this.megalint(source),
+    ])
     return "ok"
+  }
+
+  @func()
+  async megalint(source: Directory): Promise<string> {
+    return dag
+      .container()
+      .from("ghcr.io/oxsecurity/megalinter:v8")
+      .withMountedDirectory("/tmp/lint", source)
+      .withWorkdir("/tmp/lint")
+      .withEnvVariable("DEFAULT_WORKSPACE", "/tmp/lint")
+      .withEnvVariable("MEGALINTER_LINTERS", "MARKDOWN_MARKDOWNLINT,YAML_YAMLLINT")
+      .withExec(["/entrypoint.sh"])
+      .stdout()
+      .catch(err => { throw new Error("megalint: " + err.message) })
   }
 }

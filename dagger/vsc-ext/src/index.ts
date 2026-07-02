@@ -49,10 +49,25 @@ export class VscExt {
   }
 
   @func()
+  async megalint(source: Directory): Promise<string> {
+    return dag
+      .container()
+      .from("ghcr.io/oxsecurity/megalinter:v8")
+      .withMountedDirectory("/tmp/lint", source)
+      .withWorkdir("/tmp/lint")
+      .withEnvVariable("DEFAULT_WORKSPACE", "/tmp/lint")
+      .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,JSON_JSONLINT,YAML_YAMLLINT,MARKDOWN_MARKDOWNLINT")
+      .withExec(["/entrypoint.sh"])
+      .stdout()
+      .catch(err => { throw new Error("megalint: " + err.message) })
+  }
+
+  @func()
   async ci(source: Directory): Promise<string> {
     await Promise.all([
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
+      this.megalint(source).catch(err => { throw new Error(`megalint: ${err.message}`) }),
     ])
     await this.build(source)
     await this.package(source)

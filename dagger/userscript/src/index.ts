@@ -54,7 +54,27 @@ export class Userscript {
     await Promise.all([
       this.syntaxCheck(source),
       this.metadataCheck(source),
+      this.megalint(source),
     ])
     return "ok"
+  }
+
+  @func()
+  async megalint(source: Directory): Promise<string> {
+    const hasConfig = await source.file(".mega-linter.yml").id().then(() => true).catch(() => false)
+    let ctr = dag
+      .container()
+      .from("ghcr.io/oxsecurity/megalinter:v8")
+      .withMountedDirectory("/tmp/lint", source)
+      .withWorkdir("/tmp/lint")
+      .withEnvVariable("DEFAULT_WORKSPACE", "/tmp/lint")
+      .withEnvVariable("MEGALINTER_LINTERS", "JAVASCRIPT_ES,JSON_JSONLINT")
+    if (hasConfig) {
+      ctr = ctr.withEnvVariable("MEGALINTER_CONFIG", "/tmp/lint/.mega-linter.yml")
+    }
+    return ctr
+      .withExec(["/entrypoint.sh"])
+      .stdout()
+      .catch((err: Error) => { throw new Error("megalint: " + err.message) })
   }
 }
