@@ -1,22 +1,9 @@
-# Reusable CI workflow for mdBook books (100-year-strategy-book, janaushdhi-book).
-#
-# Downstream repo pins with:
-#   jobs:
-#     ci:
-#       uses: chirag127/workflows/.github/workflows/ci-mdbook.yml@main
-#       secrets: inherit
-#
-# Runs Dagger `call ci` from the mdbook module.
-
+# Thin Dagger adapter — mdBook books (janaushdhi-book).
+# Downstream: uses: chirag127/workflows/.github/workflows/ci-mdbook.yml@main
+# Cache: cacheVolume("cargo-registry") wired inside dagger/mdbook module.
 name: ci-mdbook
-
 on:
   workflow_call:
-    secrets:
-      WORKSPACE_DISPATCH_PAT:
-        description: PAT with repo scope on chirag127/workspace, for dispatching deploys.
-        required: false
-
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -27,21 +14,5 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
+          module: ./dagger/mdbook
           call: ci --source=.
-
-  trigger-deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: ci
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dispatch deploy at umbrella
-        if: env.PAT != ''
-        env:
-          PAT: ${{ secrets.WORKSPACE_DISPATCH_PAT }}
-          GH_TOKEN: ${{ secrets.WORKSPACE_DISPATCH_PAT }}
-        run: |
-          gh api repos/chirag127/workspace/dispatches \
-            -f event_type=deploy \
-            -f "client_payload[repo]=$GITHUB_REPOSITORY" \
-            -f "client_payload[sha]=$GITHUB_SHA" \
-            -f "client_payload[class]=mdbook"

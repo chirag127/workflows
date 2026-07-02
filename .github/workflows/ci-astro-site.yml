@@ -1,24 +1,9 @@
-# Reusable CI workflow for Astro static sites (blog, home, me, journal).
-#
-# Downstream repo pins with:
-#   jobs:
-#     ci:
-#       uses: chirag127/workflows/.github/workflows/ci-astro-site.yml@v1
-#       secrets: inherit
-#
-# Runs Dagger `call ci` — lint + typecheck + test + build in parallel.
-# On main-branch push, fires repository_dispatch at chirag127/workspace
-# to trigger the actual deploy (secrets live in umbrella, not here).
-
+# Thin Dagger adapter — Astro static sites (blog, home, me, journal).
+# Downstream: uses: chirag127/workflows/.github/workflows/ci-astro-site.yml@v1
+# Cache: cacheVolume("pnpm-store") wired inside dagger/astro-site module.
 name: ci-astro-site
-
 on:
   workflow_call:
-    secrets:
-      WORKSPACE_DISPATCH_PAT:
-        description: PAT with repo scope on chirag127/workspace, for dispatching deploys.
-        required: false
-
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -29,21 +14,5 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
+          module: ./dagger/astro-site
           call: ci --source=.
-
-  trigger-deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: ci
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dispatch deploy at umbrella
-        if: env.PAT != ''
-        env:
-          PAT: ${{ secrets.WORKSPACE_DISPATCH_PAT }}
-          GH_TOKEN: ${{ secrets.WORKSPACE_DISPATCH_PAT }}
-        run: |
-          gh api repos/chirag127/workspace/dispatches \
-            -f event_type=deploy \
-            -f "client_payload[repo]=$GITHUB_REPOSITORY" \
-            -f "client_payload[sha]=$GITHUB_SHA" \
-            -f "client_payload[class]=astro-site"
