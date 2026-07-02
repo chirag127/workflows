@@ -1,16 +1,14 @@
-# Reusable CI workflow for Astro static APIs (constants, countries-plus, dynasties, ragas, rto, mmi-tickertape).
+# Reusable CI workflow for VS Code extensions (sops-lens-vsc-ext).
 #
 # Downstream repo pins with:
 #   jobs:
 #     ci:
-#       uses: chirag127/workflows/.github/workflows/ci-astro-api.yml@v1
+#       uses: chirag127/workflows/.github/workflows/ci-vsc-ext.yml@main
 #       secrets: inherit
 #
-# Runs Dagger `call ci` for build + JSON schema validation.
-# On main-branch push, fires repository_dispatch at chirag127/workspace
-# to trigger deploy (GH Pages per api-hosting decision).
+# Runs Dagger `call ci` from the vsc-ext module.
 
-name: ci-astro-api
+name: ci-vsc-ext
 
 on:
   workflow_call:
@@ -46,4 +44,4 @@ jobs:
             -f event_type=deploy \
             -f "client_payload[repo]=$GITHUB_REPOSITORY" \
             -f "client_payload[sha]=$GITHUB_SHA" \
-            -f "client_payload[class]=astro-api"
+            -f "client_payload[class]=vsc-ext"

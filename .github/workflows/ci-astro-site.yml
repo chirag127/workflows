@@ -26,7 +26,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dagger/dagger-for-github@v8
+      - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
           call: ci --source=.
