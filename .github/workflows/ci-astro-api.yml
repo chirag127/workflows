@@ -1,0 +1,49 @@
+# Reusable CI workflow for Astro static APIs (constants, countries-plus, dynasties, ragas, rto, mmi-tickertape).
+#
+# Downstream repo pins with:
+#   jobs:
+#     ci:
+#       uses: chirag127/oriz-workflows/.github/workflows/ci-astro-api.yml@v1
+#       secrets: inherit
+#
+# Runs Dagger `call ci` for build + JSON schema validation.
+# On main-branch push, fires repository_dispatch at chirag127/workspace
+# to trigger deploy (GH Pages per api-hosting decision).
+
+name: ci-astro-api
+
+on:
+  workflow_call:
+    secrets:
+      WORKSPACE_DISPATCH_PAT:
+        description: PAT with repo scope on chirag127/workspace, for dispatching deploys.
+        required: false
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dagger/dagger-for-github@v8
+        with:
+          version: latest
+          call: ci --source=.
+
+  trigger-deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch deploy at umbrella
+        if: env.PAT != ''
+        env:
+          PAT: ${{ secrets.WORKSPACE_DISPATCH_PAT }}
+          GH_TOKEN: ${{ secrets.WORKSPACE_DISPATCH_PAT }}
+        run: |
+          gh api repos/chirag127/workspace/dispatches \
+            -f event_type=deploy \
+            -f "client_payload[repo]=$GITHUB_REPOSITORY" \
+            -f "client_payload[sha]=$GITHUB_SHA" \
+            -f "client_payload[class]=astro-api"
