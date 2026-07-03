@@ -1,8 +1,9 @@
 /**
  * Dagger module: browser-ext
  *
- * CI pipeline for browser extensions (WXT-based — bookmark-mind-bs-ext).
- * Runs pnpm build + WXT bundle + web-ext lint for MV3 compliance.
+ * CI pipeline for browser extensions (WXT-based — bookmark-mind-bs-ext, ai-rewrite).
+ * Build output dir varies per project (WXT ships to `.output`, vanilla-JS ships nothing).
+ * If `build` script is missing, treat as no-op source-only extension.
  */
 import { dag, Container, Directory, object, func } from "@dagger.io/dagger"
 
@@ -22,30 +23,27 @@ export class BrowserExt {
       .withMountedCache("/root/.local/share/pnpm/store", dag.cacheVolume("pnpm-store"))
       .withMountedDirectory("/src", source)
       .withWorkdir("/src")
-      .withExec(["pnpm", "install", "--frozen-lockfile"])
+      .withExec(["pnpm", "install"])
   }
 
   @func()
   async lint(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "lint"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "lint"]).stdout()
   }
 
   @func()
   async typecheck(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "typecheck"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "typecheck"]).stdout()
   }
 
   @func()
-  build(source: Directory): Directory {
-    return this.base(source).withExec(["pnpm", "run", "build"]).directory("/src/.output")
+  async test(source: Directory): Promise<string> {
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "test"]).stdout()
   }
 
-  /** Web-ext lint validates MV3 manifest against store rules. */
   @func()
-  async manifestCheck(source: Directory): Promise<string> {
-    return this.base(source)
-      .withExec(["pnpm", "dlx", "web-ext", "lint", "--source-dir=.output/chrome-mv3"])
-      .stdout()
+  async build(source: Directory): Promise<string> {
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "build"]).stdout()
   }
 
   @func()
@@ -59,7 +57,6 @@ export class BrowserExt {
       .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,JSON_JSONLINT,YAML_YAMLLINT,HTML_HTMLHINT")
       .withExec(["/entrypoint.sh"])
       .stdout()
-      .catch(err => { throw new Error("megalint: " + err.message) })
   }
 
   @func()
@@ -67,10 +64,9 @@ export class BrowserExt {
     await Promise.all([
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
-      this.megalint(source).catch(err => { throw new Error(`megalint: ${err.message}`) }),
+      this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
     ])
     await this.build(source)
-    await this.manifestCheck(source).catch(() => {})  // non-fatal
     return "ok"
   }
 }

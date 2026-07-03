@@ -1,8 +1,11 @@
 /**
  * Dagger module: mdbook
  *
- * CI pipeline for mdBook-based books (janaushdhi-book, 100-year-strategy-book).
- * Runs mdbook build + optional plugin steps (mermaid, katex).
+ * CI pipeline for mdBook-based books.
+ *
+ * Non-standard book layouts (book.json + manuscript/) are skipped gracefully:
+ * if book.toml is absent, ci() reports "skip" and returns success. Downstream
+ * repos with custom layouts keep their own build workflow.
  */
 import { dag, Container, Directory, object, func } from "@dagger.io/dagger"
 
@@ -24,25 +27,23 @@ export class Mdbook {
       .withWorkdir("/src")
   }
 
-  @func()
-  build(source: Directory): Directory {
-    return this.base(source).withExec(["mdbook", "build"]).directory("/src/book")
+  /** True when repo has a standard `book.toml` at root. */
+  private async hasBookToml(source: Directory): Promise<boolean> {
+    const entries = await source.entries()
+    return entries.includes("book.toml")
   }
 
-  /** Verify all internal links resolve. */
+  @func()
+  async build(source: Directory): Promise<string> {
+    if (!(await this.hasBookToml(source))) return "skip: no book.toml"
+    return this.base(source).withExec(["mdbook", "build"]).stdout()
+  }
+
+  /** Verify internal links. Skipped when book.toml is absent. */
   @func()
   async lint(source: Directory): Promise<string> {
+    if (!(await this.hasBookToml(source))) return "skip: no book.toml"
     return this.base(source).withExec(["mdbook", "test"]).stdout()
-  }
-
-  @func()
-  async ci(source: Directory): Promise<string> {
-    await Promise.all([
-      this.lint(source),
-      this.build(source),
-      this.megalint(source),
-    ])
-    return "ok"
   }
 
   @func()
@@ -56,6 +57,17 @@ export class Mdbook {
       .withEnvVariable("MEGALINTER_LINTERS", "MARKDOWN_MARKDOWNLINT,YAML_YAMLLINT")
       .withExec(["/entrypoint.sh"])
       .stdout()
-      .catch(err => { throw new Error("megalint: " + err.message) })
+  }
+
+  @func()
+  async ci(source: Directory): Promise<string> {
+    if (!(await this.hasBookToml(source))) {
+      return "skip: non-standard layout (no book.toml) — see repo's Build Book workflow"
+    }
+    await Promise.all([
+      this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
+      this.build(source).catch(err => { throw new Error(`build: ${err.message}`) }),
+    ])
+    return "ok"
   }
 }

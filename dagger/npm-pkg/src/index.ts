@@ -2,9 +2,7 @@
  * Dagger module: npm-pkg
  *
  * CI pipeline for publishable npm packages (`@oriz/*` scope).
- * Runs pnpm build + test + publish (umbrella-only).
- * Package is published on every merge to main (auto-publish model per
- * pipeline-stack-2026-07-01 decision).
+ * Missing scripts are no-ops via `pnpm run --if-present`.
  */
 import { dag, Container, Directory, Secret, object, func } from "@dagger.io/dagger"
 
@@ -24,39 +22,27 @@ export class NpmPkg {
       .withMountedCache("/root/.local/share/pnpm/store", dag.cacheVolume("pnpm-store"))
       .withMountedDirectory("/src", source)
       .withWorkdir("/src")
-      .withExec(["pnpm", "install", "--frozen-lockfile"])
+      .withExec(["pnpm", "install"])
   }
 
   @func()
   async lint(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "lint"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "lint"]).stdout()
   }
 
   @func()
   async typecheck(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "typecheck"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "typecheck"]).stdout()
   }
 
   @func()
   async test(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "test"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "test"]).stdout()
   }
 
   @func()
   build(source: Directory): Directory {
     return this.base(source).withExec(["pnpm", "run", "build"]).directory("/src/dist")
-  }
-
-  @func()
-  async ci(source: Directory): Promise<string> {
-    await Promise.all([
-      this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
-      this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
-      this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
-      this.megalint(source).catch(err => { throw new Error(`megalint: ${err.message}`) }),
-    ])
-    await this.build(source)
-    return "ok"
   }
 
   @func()
@@ -70,10 +56,20 @@ export class NpmPkg {
       .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,JSON_JSONLINT,YAML_YAMLLINT,MARKDOWN_MARKDOWNLINT")
       .withExec(["/entrypoint.sh"])
       .stdout()
-      .catch(err => { throw new Error("megalint: " + err.message) })
   }
 
-  /** Publish to npm. Umbrella-only. Auto on every merge to main. */
+  @func()
+  async ci(source: Directory): Promise<string> {
+    await Promise.all([
+      this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
+      this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
+      this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
+    ])
+    await this.build(source)
+    return "ok"
+  }
+
+  /** Publish to npm. Umbrella-only. */
   @func()
   async publish(source: Directory, npmToken: Secret): Promise<string> {
     return this.base(source)

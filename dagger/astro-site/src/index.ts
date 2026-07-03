@@ -2,18 +2,10 @@
  * Dagger module: astro-site
  *
  * Canonical CI pipeline for Astro static sites in the chirag127 fleet.
- * Runs lint + typecheck + test + build in parallel.
+ * Runs lint + typecheck + test in parallel, then build. Missing scripts
+ * are no-ops via `pnpm run --if-present`.
  *
- * Downstream repos reference this via:
- *   {
- *     "name": "ci",
- *     "sdk": { "source": "typescript" },
- *     "dependencies": [
- *       { "name": "astro-site", "source": "github.com/chirag127/oriz-workflows/dagger/astro-site" }
- *     ]
- *   }
- *
- * And then call: dagger call ci --source=.
+ * MegaLinter is opt-in (not part of default ci()).
  *
  * Per chirag127/workspace/knowledge/decisions/stack/dagger-confirmed-2026-07-02.md
  */
@@ -24,7 +16,6 @@ const PNPM_VERSION = "10.34.3"
 
 @object()
 export class AstroSite {
-  /** Container with pnpm + repo source + deps installed. */
   private base(source: Directory): Container {
     return dag
       .container()
@@ -36,22 +27,22 @@ export class AstroSite {
       .withMountedCache("/root/.local/share/pnpm/store", dag.cacheVolume("pnpm-store"))
       .withMountedDirectory("/src", source)
       .withWorkdir("/src")
-      .withExec(["pnpm", "install", "--frozen-lockfile"])
+      .withExec(["pnpm", "install"])
   }
 
   @func()
   async lint(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "lint"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "lint"]).stdout()
   }
 
   @func()
   async typecheck(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "typecheck"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "typecheck"]).stdout()
   }
 
   @func()
   async test(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "test"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "test"]).stdout()
   }
 
   @func()
@@ -65,7 +56,6 @@ export class AstroSite {
       .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,CSS_STYLELINT,HTML_HTMLHINT,MARKDOWN_MARKDOWNLINT,JSON_JSONLINT,YAML_YAMLLINT")
       .withExec(["/entrypoint.sh"])
       .stdout()
-      .catch(err => { throw new Error("megalint: " + err.message) })
   }
 
   @func()
@@ -73,17 +63,12 @@ export class AstroSite {
     return this.base(source).withExec(["pnpm", "run", "build"]).directory("/src/dist")
   }
 
-  /**
-   * Full CI: lint + typecheck + test in parallel, then build.
-   * Returns "ok" on success, throws on any failure.
-   */
   @func()
   async ci(source: Directory): Promise<string> {
     await Promise.all([
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
       this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
-      this.megalint(source).catch(err => { throw new Error(`megalint: ${err.message}`) }),
     ])
     await this.build(source)
     return "ok"

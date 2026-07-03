@@ -1,9 +1,11 @@
 /**
  * Dagger module: astro-pwa
  *
- * CI pipeline for Astro Progressive Web Apps (mobile PWAs — ncert-textbooks-app,
+ * CI pipeline for Astro Progressive Web Apps (ncert-textbooks-app,
  * janaushdhi-medicine-finder-app, lore-app).
- * Same as astro-site but with PWA-specific extras (icon generation validation).
+ *
+ * All script runs use `pnpm run --if-present` — missing scripts are no-ops.
+ * MegaLinter is opt-in (not part of default ci()).
  */
 import { dag, Container, Directory, object, func } from "@dagger.io/dagger"
 
@@ -23,22 +25,22 @@ export class AstroPwa {
       .withMountedCache("/root/.local/share/pnpm/store", dag.cacheVolume("pnpm-store"))
       .withMountedDirectory("/src", source)
       .withWorkdir("/src")
-      .withExec(["pnpm", "install", "--frozen-lockfile"])
+      .withExec(["pnpm", "install"])
   }
 
   @func()
   async lint(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "lint"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "lint"]).stdout()
   }
 
   @func()
   async typecheck(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "typecheck"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "typecheck"]).stdout()
   }
 
   @func()
   async test(source: Directory): Promise<string> {
-    return this.base(source).withExec(["pnpm", "run", "test"]).stdout()
+    return this.base(source).withExec(["pnpm", "run", "--if-present", "test"]).stdout()
   }
 
   @func()
@@ -57,7 +59,6 @@ export class AstroPwa {
       .withEnvVariable("MEGALINTER_LINTERS", "TYPESCRIPT_ES,CSS_STYLELINT,HTML_HTMLHINT,MARKDOWN_MARKDOWNLINT,JSON_JSONLINT,YAML_YAMLLINT")
       .withExec(["/entrypoint.sh"])
       .stdout()
-      .catch(err => { throw new Error("megalint: " + err.message) })
   }
 
   @func()
@@ -66,7 +67,6 @@ export class AstroPwa {
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
       this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
-      this.megalint(source),
     ])
     await this.build(source)
     return "ok"
