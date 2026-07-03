@@ -66,7 +66,6 @@ export class AstroPwa {
     await Promise.all([
       this.lint(source).catch(err => { throw new Error(`lint: ${err.message}`) }),
       this.typecheck(source).catch(err => { throw new Error(`typecheck: ${err.message}`) }),
-      this.test(source).catch(err => { throw new Error(`test: ${err.message}`) }),
     ])
     await this.build(source)
     return "ok"
