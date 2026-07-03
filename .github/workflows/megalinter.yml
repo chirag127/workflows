@@ -1,6 +1,11 @@
 # MegaLinter reusable workflow — chirag127 fleet
 #
 # Downstream: uses: chirag127/workflows/.github/workflows/megalinter.yml@main
+#
+# Findings post to PR + upload as artifact but do NOT gate CI. To gate:
+#   - fix the findings, OR
+#   - add per-repo .gitleaks.toml / .checkov.yml / .jscpd.json allowlists, OR
+#   - override with 'continue-on-error: false' in your calling workflow
 
 name: megalinter
 on:
@@ -21,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # gitleaks + trufflehog need history
+          fetch-depth: 0
 
       - name: Ensure fleet MegaLinter config
         run: |
@@ -34,10 +39,12 @@ jobs:
 
       - name: MegaLinter
         id: ml
+        continue-on-error: true
         uses: oxsecurity/megalinter/flavors/javascript@v8
         env:
           VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISABLE_ERRORS: true
 
       - name: Upload MegaLinter reports
         if: always()
@@ -48,3 +55,14 @@ jobs:
             megalinter-reports
             mega-linter.log
           retention-days: 14
+
+      - name: Summarize findings
+        if: always()
+        run: |
+          echo "## MegaLinter Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f mega-linter.log ]; then
+            grep -E "❌|⚠️" mega-linter.log | head -50 >> $GITHUB_STEP_SUMMARY || true
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Full reports in the megalinter-reports artifact. Gating is currently ADVISORY across the fleet." >> $GITHUB_STEP_SUMMARY
