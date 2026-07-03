@@ -5,7 +5,9 @@ name: ci-astro-api
 on:
   workflow_call:
     secrets:
-      ANTHROPIC_API_KEY:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
         required: false
 jobs:
   ci:
@@ -33,6 +35,7 @@ jobs:
         run: curl -sSL https://strix.ai/install | bash
       - name: Run Strix
         env:
-          STRIX_LLM: anthropic/claude-sonnet-4-6
-          LLM_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          STRIX_LLM: openai/@cf/meta/llama-4-scout-17b-16e-instruct
+          LLM_API_KEY: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          LLM_API_BASE: https://api.cloudflare.com/client/v4/accounts/${{ secrets.CLOUDFLARE_ACCOUNT_ID }}/ai/v1
         run: strix -n -t ./ --scan-mode quick
