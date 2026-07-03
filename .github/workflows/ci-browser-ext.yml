@@ -14,5 +14,5 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
-          module: ./dagger/browser-ext
+          module: github.com/chirag127/workflows/dagger/browser-ext@main
           call: ci --source=.

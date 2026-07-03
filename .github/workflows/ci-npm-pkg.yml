@@ -14,5 +14,5 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
-          module: ./dagger/npm-pkg
+          module: github.com/chirag127/workflows/dagger/npm-pkg@main
           call: ci --source=.

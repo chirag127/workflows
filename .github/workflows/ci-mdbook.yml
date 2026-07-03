@@ -14,5 +14,5 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
-          module: ./dagger/mdbook
+          module: github.com/chirag127/workflows/dagger/mdbook@main
           call: ci --source=.

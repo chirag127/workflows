@@ -14,5 +14,5 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
-          module: ./dagger/astro-pwa
+          module: github.com/chirag127/workflows/dagger/astro-pwa@main
           call: ci --source=.

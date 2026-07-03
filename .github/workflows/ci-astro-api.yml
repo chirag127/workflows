@@ -19,7 +19,7 @@ jobs:
       - uses: dagger/dagger-for-github@v8.4.1
         with:
           version: latest
-          module: ./dagger/astro-api
+          module: github.com/chirag127/workflows/dagger/astro-api@main
           call: ci --source=.
 
   strix:
