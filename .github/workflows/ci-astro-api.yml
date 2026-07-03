@@ -4,6 +4,9 @@
 name: ci-astro-api
 on:
   workflow_call:
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: false
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -16,3 +19,20 @@ jobs:
           version: latest
           module: ./dagger/astro-api
           call: ci --source=.
+
+  strix:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Strix
+        run: curl -sSL https://strix.ai/install | bash
+      - name: Run Strix
+        env:
+          STRIX_LLM: anthropic/claude-sonnet-4-6
+          LLM_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: strix -n -t ./ --scan-mode quick
