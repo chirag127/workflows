@@ -1,0 +1,15 @@
+name: ci-data-scrape-api
+on:
+  workflow_call:
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: latest
+          module: github.com/chirag127/workflows/dagger/data-scrape-api@main
+          call: ci --source=.

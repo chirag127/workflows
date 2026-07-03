@@ -1,55 +1,119 @@
-# MegaLinter v8 config — Astro/TypeScript/Node project family
-# Excludes: PHP, RUBY, PYTHON, SCALA, KOTLIN, JAVA, GO, RUST (upstream fork concerns)
+# MegaLinter fleet config v8 — chirag127 own repos + forks (via umbrella external-CI)
+#
+# GATING (fail CI): security scanners + correctness/dead-code linters + CI-config lint
+# ADVISORY (report, don't fail): style-only + AI-heuristic + false-positive-heavy linters
+# HARD-DISABLED: prettier/standard descriptors that fight the fleet's biome installation
+#
+# Per-repo overrides land in `.mega-linter.yml` at the downstream repo root; those
+# extend this file via `EXTENDS`. Documented in
+# knowledge/decisions/agent-tooling/megalinter-fleet-config-2026-07-03.md
 
-APPLY_FIXES: all
+APPLY_FIXES: none
 VALIDATE_ALL_CODEBASE: false
-REPORT_OUTPUT_FOLDER: /tmp/megalinter-reports
+REPORT_OUTPUT_FOLDER: megalinter-reports
+FLAVOR_SUGGESTIONS: false
 
-ENABLE_LINTERS:
-  # TypeScript / JavaScript
-  - TYPESCRIPT_ES
-  - TYPESCRIPT_STANDARD
-  - JAVASCRIPT_ES
-  - JAVASCRIPT_STANDARD
-  # CSS
-  - CSS_STYLELINT
-  # HTML
-  - HTML_HTMLHINT
-  # JSON
-  - JSON_JSONLINT
+# Skip descriptors that don't apply to the JS/TS/Astro/MV3 fleet.
+DISABLE:
+  - PHP
+  - RUBY
+  - PYTHON
+  - SCALA
+  - KOTLIN
+  - JAVA
+  - GO
+  - RUST
+  - CSHARP
+  - CPP
+  - DART
+  - TERRAFORM
+  - ANSIBLE
+  - PUPPET
+  - SALT
+
+# Descriptors we KEEP but hard-disable individual linters that duplicate biome.
+DISABLE_LINTERS:
+  - JAVASCRIPT_PRETTIER
+  - TYPESCRIPT_PRETTIER
   - JSON_PRETTIER
-  # YAML
-  - YAML_YAMLLINT
   - YAML_PRETTIER
-  # Markdown
+  - MARKDOWN_MARKDOWN_TABLE_FORMATTER
+  - JAVASCRIPT_STANDARD
+  - TYPESCRIPT_STANDARD
+  - REPOSITORY_GITLEAKS_BEFORE_COMMIT  # covered by REPOSITORY_GITLEAKS
+
+# ADVISORY only — reported, never fails CI. Everything opinionated or
+# false-positive-heavy across the fleet's varied biome configs and Astro
+# component patterns.
+DISABLE_ERRORS_LINTERS:
+  - COPYPASTE_JSCPD
+  - REPOSITORY_DEVSKIM
+  - REPOSITORY_KICS
   - MARKDOWN_MARKDOWNLINT
   - MARKDOWN_MARKDOWN_LINK_CHECK
-  # Docker
-  - DOCKERFILE_HADOLINT
-  # Spelling
   - SPELL_CSPELL
+  - SPELL_LYCHEE
+  - CSS_STYLELINT
+  - HTML_HTMLHINT
+  - JSON_NPM_PACKAGE_JSON_LINT
+  - JSON_V8R
+  - REPOSITORY_GRYPE
 
-DISABLE_LINTERS:
-  - PHP_PHPCS
-  - PHP_PHPSTAN
-  - PHP_PSALM
-  - RUBY_RUBOCOP
-  - PYTHON_PYLINT
-  - PYTHON_FLAKE8
-  - PYTHON_BLACK
-  - PYTHON_MYPY
-  - SCALA_SCALAFIX
-  - KOTLIN_KTLINT
-  - JAVA_CHECKSTYLE
-  - GO_GOLANGCI_LINT
-  - RUST_CLIPPY
+# Everything else in ENABLE_LINTERS runs as GATING by default (fail on findings).
+ENABLE_LINTERS:
+  # Secrets scanning — GATE
+  - REPOSITORY_GITLEAKS
+  - REPOSITORY_SECRETLINT
+  - REPOSITORY_TRUFFLEHOG
+  # Vulnerability + supply-chain — GATE
+  - REPOSITORY_SEMGREP
+  - REPOSITORY_TRIVY
+  - REPOSITORY_OSV_SCANNER
+  - REPOSITORY_DUSTILOCK
+  - REPOSITORY_CHECKOV
+  # Correctness (JS/TS) — GATE
+  - JAVASCRIPT_ES
+  - TYPESCRIPT_ES
+  - JSX_ESLINT
+  - TSX_ESLINT
+  # Config-file lint — GATE
+  - JSON_JSONLINT
+  - YAML_YAMLLINT
+  - ENV_DOTENV_LINTER
+  - DOCKERFILE_HADOLINT
+  - ACTION_ACTIONLINT
+  - ACTION_ZIZMOR
+  # Style — ADVISORY (via DISABLE_ERRORS_LINTERS above)
+  - COPYPASTE_JSCPD
+  - REPOSITORY_DEVSKIM
+  - REPOSITORY_KICS
+  - REPOSITORY_GRYPE
+  - MARKDOWN_MARKDOWNLINT
+  - MARKDOWN_MARKDOWN_LINK_CHECK
+  - SPELL_CSPELL
+  - SPELL_LYCHEE
+  - CSS_STYLELINT
+  - HTML_HTMLHINT
+  - JSON_NPM_PACKAGE_JSON_LINT
+  - JSON_V8R
 
-# Per-linter overrides
-TYPESCRIPT_ES_CONFIG_FILE: .eslintrc.json
-JAVASCRIPT_ES_CONFIG_FILE: .eslintrc.json
-CSS_STYLELINT_CONFIG_FILE: .stylelintrc.json
-YAML_YAMLLINT_CONFIG_FILE: .yamllint.yml
-MARKDOWN_MARKDOWNLINT_CONFIG_FILE: .markdownlint.json
+# Per-linter config paths — respect the repo's own eslint config if present.
+TYPESCRIPT_ES_CONFIG_FILE: eslint.config.js
+JAVASCRIPT_ES_CONFIG_FILE: eslint.config.js
+JSX_ESLINT_CONFIG_FILE: eslint.config.js
+TSX_ESLINT_CONFIG_FILE: eslint.config.js
 
-# Ignore paths
-FILTER_REGEX_EXCLUDE: (\.git|node_modules|dist|\.astro|build|\.cache|pnpm-lock\.yaml)
+# TRIVY carves out node_modules subdirs where transitive deps still ship
+# old vulnerable copies inside test fixtures.
+REPOSITORY_TRIVY_ARGUMENTS: >-
+  --skip-dirs=node_modules,dist,out,build,.astro,coverage,megalinter-reports
+
+# Astro components legitimately repeat <head> boilerplate; keep JSCPD noise-tolerant.
+COPYPASTE_JSCPD_ARGUMENTS: "--min-tokens 80 --min-lines 12"
+
+# Filter paths — generated + vendored + reports
+FILTER_REGEX_EXCLUDE: (\.git|node_modules|dist|\.astro|\.output|build|coverage|\.cache|pnpm-lock\.yaml|package-lock\.json|megalinter-reports|\.wrangler|sdk/client\.gen\.ts|sdk/core\..*)
+
+# Failure behavior — respect DISABLE_ERRORS_LINTERS above, don't auto-clobber.
+FAIL_IF_UPDATED_SOURCES: false
+FAIL_IF_MISSING_LINTER_IN_FLAVOR: false
