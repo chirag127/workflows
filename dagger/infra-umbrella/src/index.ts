@@ -17,7 +17,7 @@ export class InfraUmbrella {
       .container()
       .from("node:22-slim")
       .withExec(["apt-get", "update"])
-      .withExec(["apt-get", "install", "-y", "--no-install-recommends", "git", "ca-certificates", "jq"])
+      .withExec(["apt-get", "install", "-y", "--no-install-recommends", "git", "ca-certificates", "jq", "bash"])
       .withMountedDirectory("/src", source)
       .withWorkdir("/src")
   }
@@ -40,7 +40,7 @@ export class InfraUmbrella {
   @func()
   async envExampleMirrors(source: Directory): Promise<string> {
     return this.base(source)
-      .withExec(["sh", "-c", `
+      .withExec(["bash", "-c", `
         set -e
         if [ ! -f .env.example ]; then
           echo "skip: no .env.example"
