@@ -25,7 +25,7 @@ export class AstroPwa {
       .withMountedCache("/root/.local/share/pnpm/store", dag.cacheVolume("pnpm-store"))
       .withMountedDirectory("/src", source)
       .withWorkdir("/src")
-      .withExec(["pnpm", "install"])
+      .withExec(["pnpm", "install", "--ignore-scripts"])
   }
 
   @func()
