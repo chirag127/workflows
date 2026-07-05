@@ -10,6 +10,17 @@
 name: megalinter
 on:
   workflow_call: {}
+  # Self-test on changes to this workflow or the fleet lint config, so we notice
+  # if the reusable workflow itself regresses without waiting for a downstream repo.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/megalinter.yml'
+      - '.mega-linter.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/megalinter.yml'
+      - '.mega-linter.yml'
 
 concurrency:
   group: megalinter-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
