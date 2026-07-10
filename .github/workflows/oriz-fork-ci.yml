@@ -1,0 +1,138 @@
+name: Fork CI (external, zero-byte on fork main)
+
+# Runs fork-audit (drift check + license + MegaLinter security flavor)
+# against each fork's current submodule pointer. Adds ZERO bytes to any
+# fork's main — commit-status is posted via GitHub API from the umbrella.
+# Preserves knowledge/rules/agent/no-fork-divergence + fork-thin-upstream-tracking.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fork:
+        description: 'Fork slug (or "all")'
+        required: true
+        default: all
+        type: choice
+        options: [all, freellmapi, omniroute, ai-rewrite, screenpipe, bcu, youtube]
+  schedule:
+    - cron: '17 3 * * *'  # nightly 03:17 UTC, off-peak
+  repository_dispatch:
+    types: [fork-pointer-bumped]
+
+concurrency:
+  group: fork-ci-${{ github.event.inputs.fork || 'schedule' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  statuses: write  # to post commit status back to chirag127/<fork>
+
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        fork: [freellmapi, omniroute, ai-rewrite, screenpipe, bcu, youtube]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip if single-fork dispatch and not this one
+        id: gate
+        run: |
+          REQUESTED='${{ github.event.inputs.fork }}'
+          if [ -n "$REQUESTED" ] && [ "$REQUESTED" != "all" ] && [ "$REQUESTED" != "${{ matrix.fork }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping ${{ matrix.fork }} — dispatch requested $REQUESTED"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          repository: chirag127/workspace
+          token: ${{ secrets.SYNC_TOKEN }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve fork slug → repo + submodule path
+        id: paths
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          case "${{ matrix.fork }}" in
+            freellmapi)    echo "repo=chirag127/freellmapi" >> $GITHUB_OUTPUT; echo "path=repos/frk/freellmapi" >> $GITHUB_OUTPUT ;;
+            omniroute)     echo "repo=chirag127/OmniRoute" >> $GITHUB_OUTPUT; echo "path=repos/frk/omniroute" >> $GITHUB_OUTPUT ;;
+            ai-rewrite)    echo "repo=chirag127/Ai-rewrite" >> $GITHUB_OUTPUT; echo "path=repos/frk/ai-rewrite-bs-ext" >> $GITHUB_OUTPUT ;;
+            screenpipe)    echo "repo=chirag127/screenpipe" >> $GITHUB_OUTPUT; echo "path=repos/frk/screenpipe" >> $GITHUB_OUTPUT ;;
+            bcu)           echo "repo=chirag127/Bulk-Crap-Uninstaller" >> $GITHUB_OUTPUT; echo "path=repos/frk/bcu" >> $GITHUB_OUTPUT ;;
+            youtube)       echo "repo=chirag127/youtube" >> $GITHUB_OUTPUT; echo "path=repos/frk/youtube" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Guard — submodule path exists
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          if [ ! -d "${{ steps.paths.outputs.path }}" ]; then
+            echo "::warning::submodule ${{ steps.paths.outputs.path }} missing — skipping"
+            exit 0
+          fi
+
+      - name: Resolve fork HEAD SHA
+        id: sha
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          SHA=$(git -C "${{ steps.paths.outputs.path }}" rev-parse HEAD 2>/dev/null || echo "")
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "Fork SHA: $SHA"
+
+      - name: Post status → pending
+        if: steps.gate.outputs.skip != 'true' && steps.sha.outputs.sha != ''
+        uses: actions/github-script@v7
+        env:
+          FORK_REPO: ${{ steps.paths.outputs.repo }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        with:
+          github-token: ${{ secrets.FORK_STATUS_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const [owner, repo] = process.env.FORK_REPO.split('/')
+            try {
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: process.env.SHA,
+                state: 'pending', context: 'oriz/fork-audit',
+                target_url: `https://github.com/chirag127/workspace/actions/runs/${context.runId}`,
+                description: 'external audit running',
+              })
+            } catch (err) {
+              core.warning(`status post skipped: ${err.message}`)
+            }
+
+      - name: Run fork-audit via Dagger
+        id: audit
+        if: steps.gate.outputs.skip != 'true' && steps.sha.outputs.sha != ''
+        continue-on-error: true
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: latest
+          module: github.com/chirag127/workflows/dagger/fork-audit@main
+          call: ci --source=${{ steps.paths.outputs.path }}
+
+      - name: Post status → final
+        if: always() && steps.gate.outputs.skip != 'true' && steps.sha.outputs.sha != ''
+        uses: actions/github-script@v7
+        env:
+          FORK_REPO: ${{ steps.paths.outputs.repo }}
+          SHA: ${{ steps.sha.outputs.sha }}
+          OUTCOME: ${{ steps.audit.outcome }}
+        with:
+          github-token: ${{ secrets.FORK_STATUS_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const [owner, repo] = process.env.FORK_REPO.split('/')
+            const outcome = process.env.OUTCOME
+            const state = outcome === 'success' ? 'success' : outcome === 'skipped' ? 'success' : 'failure'
+            try {
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: process.env.SHA,
+                state, context: 'oriz/fork-audit',
+                target_url: `https://github.com/chirag127/workspace/actions/runs/${context.runId}`,
+                description: `${outcome} — drift + license + megalint`,
+              })
+            } catch (err) {
+              core.warning(`status post skipped: ${err.message}`)
+            }

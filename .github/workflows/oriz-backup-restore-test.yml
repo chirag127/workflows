@@ -1,0 +1,62 @@
+name: Backup restore test (monthly)
+# Picks a random repo's latest tarball from B2, downloads, unpacks,
+# verifies the archive has issues/PRs JSON or repositories/ dir.
+# Setup runbook: knowledge/runbooks/backup-metadata-to-b2.md
+
+on:
+  schedule:
+    - cron: '0 4 1 * *'   # 1st of each month, 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install AWS CLI
+        run: |
+          curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscli.zip
+          unzip -q awscli.zip && sudo ./aws/install --update >/dev/null
+          aws --version
+
+      - name: Pick random repo + latest backup
+        id: pick
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          BUCKET: ${{ secrets.B2_BUCKET_NAME }}
+          ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+        run: |
+          REPOS=$(aws s3 ls "s3://${BUCKET}/metadata/" --endpoint-url "${ENDPOINT}" | awk '/PRE/{gsub("/","",$2); print $2}')
+          if [ -z "$REPOS" ]; then
+            echo "::error::No backups found at s3://${BUCKET}/metadata/"
+            exit 1
+          fi
+          PICK=$(echo "$REPOS" | shuf -n 1)
+          LATEST=$(aws s3 ls "s3://${BUCKET}/metadata/${PICK}/" --endpoint-url "${ENDPOINT}" | sort | tail -1 | awk '{print $NF}')
+          aws s3 cp "s3://${BUCKET}/metadata/${PICK}/${LATEST}" backup.tar.gz --endpoint-url "${ENDPOINT}"
+          echo "pick=$PICK" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Unpack + smoke-test
+        run: |
+          mkdir -p restored && tar -xzf backup.tar.gz -C restored
+          if ! find restored -maxdepth 4 -name 'repositories' -type d | grep -q .; then
+            echo "::error::No repositories/ directory in tarball"; exit 1
+          fi
+          ISSUES=$(find restored -name 'issues_*.json' -exec jq 'length' {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          PRS=$(find restored -name 'pull_requests_*.json' -exec jq 'length' {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          echo "::notice::Restored ${{ steps.pick.outputs.pick }} ${{ steps.pick.outputs.latest }}: ${ISSUES} issues, ${PRS} PRs"
+
+      - name: Post status issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GH_ADMIN_PAT }}
+        run: |
+          gh issue create \
+            -R chirag127/workspace \
+            -t "Backup restore test failed $(date -u +%F)" \
+            -b "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

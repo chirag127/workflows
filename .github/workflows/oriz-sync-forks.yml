@@ -1,0 +1,99 @@
+# Weekly upstream sync for chirag127 forks (auto-PR, auto-merge on clean).
+#
+# Per knowledge/rules/agent/fork-thin-upstream-tracking.md (revised 2026-06-29):
+# - chirag127/freellmapi         main tracks tashfeenahmed/freellmapi  main
+# - chirag127/omniroute          main tracks diegosouzapw/OmniRoute    main
+# - chirag127/ai-rewrite-bs-ext  main tracks SupratimRK/Ai-rewrite     main
+# - Sync model: weekly cron opens a PR; auto-merge on clean fast-forward, human review on conflict.
+# - Oriz work still never touches fork main; lives on `oriz/<topic>` branches or
+#   the chirag127 personal fork per the rule. Force-push of fork main is no longer used.
+#
+# Schedule rationale: Sunday 03:00 IST = 21:30 UTC Saturday = quiet hours,
+# weekend gives time to triage Monday morning before workweek.
+
+name: oriz-sync-forks
+
+on:
+  schedule:
+    - cron: '30 21 * * 6'  # Sun 03:00 IST = Sat 21:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # one fork failing doesn't block the others
+      matrix:
+        fork:
+          - { name: freellmapi,        upstream: 'tashfeenahmed/freellmapi', branch: main }
+          - { name: omniroute,         upstream: 'diegosouzapw/OmniRoute',   branch: main }
+          - { name: ai-rewrite-bs-ext, upstream: 'SupratimRK/Ai-rewrite',    branch: main }
+    steps:
+      - name: Sync ${{ matrix.fork.name }} from ${{ matrix.fork.upstream }}
+        env:
+          # SYNC_TOKEN must be a PAT (classic, repo scope) stored in
+          # chirag127/workspace > Settings > Secrets and variables > Actions.
+          # The default GITHUB_TOKEN cannot push to OTHER repos or open cross-repo PRs.
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          FORK: ${{ matrix.fork.name }}
+          UPSTREAM: ${{ matrix.fork.upstream }}
+          BRANCH: ${{ matrix.fork.branch }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::SYNC_TOKEN secret not set. Create a PAT with repo scope and add it."
+            exit 1
+          fi
+
+          # Clone the FORK (not upstream) — we need to push branches + open PRs against it.
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/chirag127/${FORK}.git" work
+          cd work
+          git config user.name  "oriz-sync-bot"
+          git config user.email "noreply@oriz.in"
+
+          git remote add upstream "https://github.com/${UPSTREAM}.git"
+          git fetch upstream "${BRANCH}"
+
+          UPSTREAM_SHA=$(git rev-parse "upstream/${BRANCH}")
+          FORK_SHA=$(git rev-parse "${BRANCH}")
+          if [ "${UPSTREAM_SHA}" = "${FORK_SHA}" ]; then
+            echo "${FORK}: already in sync (sha=${UPSTREAM_SHA::7})"
+            exit 0
+          fi
+
+          # Create a sync branch from upstream and push it.
+          SYNC_BRANCH="upstream-sync/$(date -u +%Y-%m-%d)"
+          git checkout -b "${SYNC_BRANCH}" "upstream/${BRANCH}"
+          git push -f origin "${SYNC_BRANCH}"
+
+          # Open (or reuse) a PR from sync branch into fork main.
+          PR_TITLE="chore: sync from upstream ${UPSTREAM} @ ${UPSTREAM_SHA::7}"
+          PR_BODY="Automated weekly sync.
+
+          - Upstream: \`${UPSTREAM}@${BRANCH}\` -> \`${UPSTREAM_SHA}\`
+          - Fork:     \`chirag127/${FORK}@${BRANCH}\` -> \`${FORK_SHA}\`
+
+          Per [fork-thin-upstream-tracking](https://github.com/chirag127/workspace/blob/main/knowledge/rules/agent/fork-thin-upstream-tracking.md): oriz work never lands on fork main. This PR brings the fork's main back in step with upstream."
+
+          EXISTING=$(gh pr list --repo "chirag127/${FORK}" --head "${SYNC_BRANCH}" --json number --jq '.[0].number' || echo "")
+          if [ -z "${EXISTING}" ]; then
+            gh pr create \
+              --repo "chirag127/${FORK}" \
+              --base "${BRANCH}" \
+              --head "${SYNC_BRANCH}" \
+              --title "${PR_TITLE}" \
+              --body  "${PR_BODY}"
+          else
+            echo "${FORK}: reusing existing PR #${EXISTING}"
+          fi
+
+          # Enable auto-merge (merge commit, since this is a tracking branch).
+          # If the PR is already mergeable + checks pass, this merges immediately.
+          # If conflicts exist, auto-merge waits for a human to resolve.
+          gh pr merge --repo "chirag127/${FORK}" --auto --merge "${SYNC_BRANCH}" || \
+            echo "::warning::${FORK}: auto-merge could not be enabled; PR awaiting human review"
+
+          echo "::notice::${FORK}: PR open for ${UPSTREAM_SHA::7} (was ${FORK_SHA::7})"
