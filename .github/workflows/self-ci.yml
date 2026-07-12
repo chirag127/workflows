@@ -1,0 +1,58 @@
+# Validates this repo itself: every dagger.json is well-formed + actionlint on all workflows.
+# Does NOT touch dagger/*/sdk/ (generated codegen).
+name: self-ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-dagger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate every dagger.json (schema + name matches dir)
+        run: |
+          fail=0
+          for f in dagger/*/dagger.json; do
+            dir=$(basename "$(dirname "$f")")
+            node -e '
+              const fs=require("fs");
+              const [f,dir]=process.argv.slice(1);
+              const j=JSON.parse(fs.readFileSync(f,"utf8"));
+              const req=["name","engineVersion","sdk","source"];
+              for(const k of req) if(!(k in j)){console.error(`${f}: missing "${k}"`);process.exit(1);}
+              if(j.name!==dir){console.error(`${f}: name "${j.name}" != dir "${dir}"`);process.exit(1);}
+              if(!j.sdk||j.sdk.source!=="typescript"){console.error(`${f}: sdk.source must be "typescript"`);process.exit(1);}
+              console.log(`ok  ${f}`);
+            ' "$f" "$dir" || fail=1
+          done
+          exit $fail
+
+  gen-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate site (must not error)
+        run: node scripts/gen-docs.mjs
+      - name: Fail if site/index.html empty
+        run: test -s site/index.html
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run actionlint
+        run: |
+          bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash)
+          ./actionlint -color

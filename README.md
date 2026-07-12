@@ -28,9 +28,10 @@ jobs:
 | `.github/workflows/ci-astro-pwa.yml` | Astro mobile PWAs (ncert, janaushdhi, lore) |
 | `.github/workflows/ci-mdbook.yml` | mdBook books (janaushdhi-book, me-book) |
 | `.github/workflows/ci-vsc-ext.yml` | VS Code extensions (sops-lens-vsc-ext) |
-| `.github/workflows/ci-bs-ext.yml` | Browser extensions (bookmark-mind-bs-ext) |
-| `.github/workflows/ci-userscript.yml` | Userscripts (chirag127/userscripts) |
-| `.github/workflows/ci-npm-package.yml` | Publishable npm packages |
+| `.github/workflows/ci-browser-ext.yml` | Browser extensions (bookmark-mind-bs-ext) |
+| `.github/workflows/ci-data-scrape-api.yml` | Data-scrape APIs (dns-filters and similar scrapers) |
+| `.github/workflows/ci-infra-umbrella.yml` | Infra umbrella repos (workspace plumbing) |
+| `.github/workflows/ci-npm-pkg.yml` | Publishable npm packages |
 
 ## Model
 
