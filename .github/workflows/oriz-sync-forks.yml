@@ -1,12 +1,16 @@
 # Weekly upstream sync for chirag127 forks (auto-PR, auto-merge on clean).
 #
 # Per knowledge/rules/agent/fork-thin-upstream-tracking.md (revised 2026-06-29):
-# - chirag127/freellmapi         main tracks tashfeenahmed/freellmapi  main
-# - chirag127/omniroute          main tracks diegosouzapw/OmniRoute    main
-# - chirag127/ai-rewrite-bs-ext  main tracks SupratimRK/Ai-rewrite     main
+# - chirag127/freellmapi   main tracks tashfeenahmed/freellmapi  main
+# - chirag127/Ai-rewrite   main tracks SupratimRK/Ai-rewrite     main
 # - Sync model: weekly cron opens a PR; auto-merge on clean fast-forward, human review on conflict.
 # - Oriz work still never touches fork main; lives on `oriz/<topic>` branches or
 #   the chirag127 personal fork per the rule. Force-push of fork main is no longer used.
+#
+# omniroute is intentionally NOT auto-synced here: per
+# knowledge/rules/agent/fork/omniroute-tracks-latest-release-not-main.md the fork
+# develops on release/* branches and has no `main` — this main→main tracking model
+# does not apply. Track its latest release branch manually.
 #
 # Schedule rationale: Sunday 03:00 IST = 21:30 UTC Saturday = quiet hours,
 # weekend gives time to triage Monday morning before workweek.
@@ -28,9 +32,8 @@ jobs:
       fail-fast: false  # one fork failing doesn't block the others
       matrix:
         fork:
-          - { name: freellmapi,        upstream: 'tashfeenahmed/freellmapi', branch: main }
-          - { name: omniroute,         upstream: 'diegosouzapw/OmniRoute',   branch: main }
-          - { name: ai-rewrite-bs-ext, upstream: 'SupratimRK/Ai-rewrite',    branch: main }
+          - { name: freellmapi, upstream: 'tashfeenahmed/freellmapi', branch: main }
+          - { name: Ai-rewrite, upstream: 'SupratimRK/Ai-rewrite',    branch: main }
     steps:
       - name: Sync ${{ matrix.fork.name }} from ${{ matrix.fork.upstream }}
         env:
