@@ -34,17 +34,17 @@ jobs:
     steps:
       - name: Sync ${{ matrix.fork.name }} from ${{ matrix.fork.upstream }}
         env:
-          # SYNC_TOKEN must be a PAT (classic, repo scope) stored in
-          # chirag127/workspace > Settings > Secrets and variables > Actions.
+          # GH_ADMIN_PAT must be a PAT (classic, repo scope) stored in
+          # chirag127/workflows > Settings > Secrets and variables > Actions.
           # The default GITHUB_TOKEN cannot push to OTHER repos or open cross-repo PRs.
-          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_ADMIN_PAT }}
           FORK: ${{ matrix.fork.name }}
           UPSTREAM: ${{ matrix.fork.upstream }}
           BRANCH: ${{ matrix.fork.branch }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::SYNC_TOKEN secret not set. Create a PAT with repo scope and add it."
+            echo "::error::GH_ADMIN_PAT secret not set. Create a PAT with repo scope and add it."
             exit 1
           fi
 
