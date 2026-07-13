@@ -26,7 +26,7 @@ jobs:
           ORG=$(gh repo list chirag127 --limit 500 --json nameWithOwner --jq '.[].nameWithOwner')
           USR=$(gh repo list chirag127 --limit 500 --json nameWithOwner --jq '.[].nameWithOwner')
           printf '%s\n%s\n' "$ORG" "$USR" | jq -Rn '[inputs | select(length > 0)]' > repos.json
-          echo "repos=$(cat repos.json | jq -c '.')" >> "$GITHUB_OUTPUT"
+          echo "repos=$(jq -c '.' repos.json)" >> "$GITHUB_OUTPUT"
 
   backup:
     needs: discover

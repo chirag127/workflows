@@ -23,18 +23,29 @@ jobs:
           fail=0
           for f in dagger/*/dagger.json; do
             dir=$(basename "$(dirname "$f")")
-            node -e '
-              const fs=require("fs");
-              const [f,dir]=process.argv.slice(1);
-              const j=JSON.parse(fs.readFileSync(f,"utf8"));
-              const req=["name","engineVersion","sdk","source"];
-              for(const k of req) if(!(k in j)){console.error(`${f}: missing "${k}"`);process.exit(1);}
-              if(j.name!==dir){console.error(`${f}: name "${j.name}" != dir "${dir}"`);process.exit(1);}
-              if(!j.sdk||j.sdk.source!=="typescript"){console.error(`${f}: sdk.source must be "typescript"`);process.exit(1);}
+            node - "$f" "$dir" <<'NODE' || fail=1
+              const fs = require("fs");
+              const [f, dir] = process.argv.slice(2);
+              const j = JSON.parse(fs.readFileSync(f, "utf8"));
+              const req = ["name", "engineVersion", "sdk", "source"];
+              for (const k of req) {
+                if (!(k in j)) {
+                  console.error(`${f}: missing "${k}"`);
+                  process.exit(1);
+                }
+              }
+              if (j.name !== dir) {
+                console.error(`${f}: name "${j.name}" != dir "${dir}"`);
+                process.exit(1);
+              }
+              if (!j.sdk || j.sdk.source !== "typescript") {
+                console.error(`${f}: sdk.source must be "typescript"`);
+                process.exit(1);
+              }
               console.log(`ok  ${f}`);
-            ' "$f" "$dir" || fail=1
+          NODE
           done
-          exit $fail
+          exit "$fail"
 
   gen-docs:
     runs-on: ubuntu-latest

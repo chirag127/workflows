@@ -41,7 +41,7 @@ jobs:
         run: |
           REQUESTED='${{ github.event.inputs.fork }}'
           if [ -n "$REQUESTED" ] && [ "$REQUESTED" != "all" ] && [ "$REQUESTED" != "${{ matrix.fork }}" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Skipping ${{ matrix.fork }} — dispatch requested $REQUESTED"
           fi
 
@@ -58,12 +58,12 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: |
           case "${{ matrix.fork }}" in
-            freellmapi)    echo "repo=chirag127/freellmapi" >> $GITHUB_OUTPUT; echo "path=repos/frk/freellmapi" >> $GITHUB_OUTPUT ;;
-            omniroute)     echo "repo=chirag127/OmniRoute" >> $GITHUB_OUTPUT; echo "path=repos/frk/omniroute" >> $GITHUB_OUTPUT ;;
-            ai-rewrite)    echo "repo=chirag127/Ai-rewrite" >> $GITHUB_OUTPUT; echo "path=repos/frk/ai-rewrite-bs-ext" >> $GITHUB_OUTPUT ;;
-            screenpipe)    echo "repo=chirag127/screenpipe" >> $GITHUB_OUTPUT; echo "path=repos/frk/screenpipe" >> $GITHUB_OUTPUT ;;
-            bcu)           echo "repo=chirag127/Bulk-Crap-Uninstaller" >> $GITHUB_OUTPUT; echo "path=repos/frk/bcu" >> $GITHUB_OUTPUT ;;
-            youtube)       echo "repo=chirag127/youtube" >> $GITHUB_OUTPUT; echo "path=repos/frk/youtube" >> $GITHUB_OUTPUT ;;
+            freellmapi)    echo "repo=chirag127/freellmapi" >> "$GITHUB_OUTPUT"; echo "path=repos/frk/freellmapi" >> "$GITHUB_OUTPUT" ;;
+            omniroute)     echo "repo=chirag127/OmniRoute" >> "$GITHUB_OUTPUT"; echo "path=repos/frk/omniroute" >> "$GITHUB_OUTPUT" ;;
+            ai-rewrite)    echo "repo=chirag127/Ai-rewrite" >> "$GITHUB_OUTPUT"; echo "path=repos/frk/ai-rewrite-bs-ext" >> "$GITHUB_OUTPUT" ;;
+            screenpipe)    echo "repo=chirag127/screenpipe" >> "$GITHUB_OUTPUT"; echo "path=repos/frk/screenpipe" >> "$GITHUB_OUTPUT" ;;
+            bcu)           echo "repo=chirag127/Bulk-Crap-Uninstaller" >> "$GITHUB_OUTPUT"; echo "path=repos/frk/bcu" >> "$GITHUB_OUTPUT" ;;
+            youtube)       echo "repo=chirag127/youtube" >> "$GITHUB_OUTPUT"; echo "path=repos/frk/youtube" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Guard — submodule path exists
@@ -79,7 +79,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: |
           SHA=$(git -C "${{ steps.paths.outputs.path }}" rev-parse HEAD 2>/dev/null || echo "")
-          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Fork SHA: $SHA"
 
       - name: Post status → pending

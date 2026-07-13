@@ -70,10 +70,10 @@ jobs:
       - name: Summarize findings
         if: always()
         run: |
-          echo "## MegaLinter Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## MegaLinter Report" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ -f mega-linter.log ]; then
-            grep -E "❌|⚠️" mega-linter.log | head -50 >> $GITHUB_STEP_SUMMARY || true
+            grep -E "❌|⚠️" mega-linter.log | head -50 >> "$GITHUB_STEP_SUMMARY" || true
           fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Full reports in the megalinter-reports artifact. Gating is currently ADVISORY across the fleet." >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full reports in the megalinter-reports artifact. Gating is currently ADVISORY across the fleet." >> "$GITHUB_STEP_SUMMARY"

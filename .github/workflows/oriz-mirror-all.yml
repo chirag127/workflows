@@ -76,8 +76,10 @@ jobs:
             fi
           done
 
-          echo "Total public repos/own/* to mirror: $(echo "$PUBLIC_REPOS" | jq 'length')"
-          echo "repos=$(echo "$PUBLIC_REPOS" | jq -c)" >> $GITHUB_OUTPUT
+          PUBLIC_COUNT=$(jq 'length' <<< "$PUBLIC_REPOS")
+          COMPACT_REPOS=$(jq -c '.' <<< "$PUBLIC_REPOS")
+          echo "Total public repos/own/* to mirror: $PUBLIC_COUNT"
+          echo "repos=$COMPACT_REPOS" >> "$GITHUB_OUTPUT"
 
   # ── Step 2: Mirror to each host in parallel ────────────────────────────────
   mirror:
@@ -318,7 +320,7 @@ jobs:
           curl -sSfL -H "Accept: text/plain" -H "User-Agent: curl/8" https://radicle.xyz/install -o /tmp/rad-install.sh
           head -1 /tmp/rad-install.sh   # sanity-check it's a shell script
           sh /tmp/rad-install.sh
-          echo "$HOME/.radicle/bin" >> $GITHUB_PATH
+          echo "$HOME/.radicle/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.radicle/bin:$PATH"
           rad --version
       - name: Restore Radicle identity from secret
