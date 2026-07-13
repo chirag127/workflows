@@ -49,7 +49,7 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         with:
           repository: chirag127/workspace
-          token: ${{ secrets.SYNC_TOKEN }}
+          token: ${{ secrets.GH_ADMIN_PAT }}
           submodules: recursive
           fetch-depth: 0
 
