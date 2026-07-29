@@ -2,16 +2,11 @@
 #
 # Downstream: uses: chirag127/workflows/.github/workflows/megalinter.yml@main
 #
-# Findings post to PR + upload as artifact but do NOT gate CI. To gate:
-#   - fix the findings, OR
-#   - add per-repo .gitleaks.toml / .checkov.yml / .jscpd.json allowlists, OR
-#   - override with 'continue-on-error: false' in your calling workflow
+# Everything enabled, everything auto-fixed, commits fixes back on push. Never gates CI.
 
 name: megalinter
 on:
   workflow_call: {}
-  # Self-test on changes to this workflow or the fleet lint config, so we notice
-  # if the reusable workflow itself regresses without waiting for a downstream repo.
   push:
     branches: [main]
     paths:
@@ -30,7 +25,7 @@ jobs:
   megalinter:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
       security-events: write
@@ -38,6 +33,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Ensure fleet MegaLinter config
         run: |
@@ -51,10 +47,14 @@ jobs:
       - name: MegaLinter
         id: ml
         continue-on-error: true
-        uses: oxsecurity/megalinter/flavors/javascript@v8
+        uses: oxsecurity/megalinter@v8
         env:
+          MEGALINTER_FLAVOR: all
           VALIDATE_ALL_CODEBASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLY_FIXES: all
+          APPLY_FIXES_EVENT: push
+          APPLY_FIXES_MODE: commit
           DISABLE_ERRORS: true
 
       - name: Upload MegaLinter reports
@@ -76,4 +76,4 @@ jobs:
             grep -E "❌|⚠️" mega-linter.log | head -50 >> "$GITHUB_STEP_SUMMARY" || true
           fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Full reports in the megalinter-reports artifact. Gating is currently ADVISORY across the fleet." >> "$GITHUB_STEP_SUMMARY"
+          echo "Full reports in the megalinter-reports artifact. Auto-fixes commit back on push. Gating is ADVISORY across the fleet." >> "$GITHUB_STEP_SUMMARY"
