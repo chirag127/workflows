@@ -1,8 +1,11 @@
 # oriz-workflows
 
 [![GitHub stars](https://img.shields.io/github/stars/chirag127/workflows?style=social)](https://github.com/chirag127/workflows/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/chirag127/workflows/blob/main/LICENSE)
 
 Reusable GitHub Actions workflows for the [`chirag127`](https://github.com/chirag127) fleet.
+
+**Live catalog:** [workflows.oriz.in](https://workflows.oriz.in)
 
 Every workflow is a thin adapter calling [Dagger](https://dagger.io). Downstream repos consume with a 5-line pin. All real CI/deploy logic lives in Dagger TS modules — locally reproducible via `dagger call ci` on any laptop with Docker.
 
