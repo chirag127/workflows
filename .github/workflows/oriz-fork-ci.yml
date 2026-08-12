@@ -6,7 +6,7 @@ name: Fork CI (external, zero-byte on fork main)
 # Preserves knowledge/rules/agent/no-fork-divergence + fork-thin-upstream-tracking.
 #
 # Requires GH_ADMIN_PAT secret (classic PAT, repo scope) to clone the private
-# workspace repo. If the secret is absent the workflow skips with a warning.
+# workspace repo. If the token is absent or expired the workflow skips with a warning.
 
 on:
   workflow_dispatch:
@@ -41,7 +41,14 @@ jobs:
           PAT: ${{ secrets.GH_ADMIN_PAT }}
         run: |
           if [ -z "$PAT" ]; then
-            echo "::warning::GH_ADMIN_PAT secret missing or empty — Fork CI skipped. Add a classic PAT (repo scope) as GH_ADMIN_PAT to chirag127/workflows secrets."
+            echo "::warning::GH_ADMIN_PAT secret missing — Fork CI skipped. Add a valid classic PAT (repo scope) as GH_ADMIN_PAT to chirag127/workflows secrets."
+            echo "has_pat=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Validate token is not expired by calling the GitHub API
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $PAT" https://api.github.com/user)
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::GH_ADMIN_PAT is invalid or expired (HTTP $STATUS) — Fork CI skipped. Regenerate the PAT and update the secret."
             echo "has_pat=false" >> "$GITHUB_OUTPUT"
           else
             echo "has_pat=true" >> "$GITHUB_OUTPUT"
