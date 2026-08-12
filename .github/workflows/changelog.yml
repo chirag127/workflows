@@ -1,5 +1,5 @@
 # Reusable: maintain CHANGELOG.md (Keep-a-Changelog format) from conventional commits.
-# Commits back to main excluding .github/workflows/** to avoid recursive trigger.
+# Commits back to main with [skip ci] to prevent re-trigger.
 # Keyless LLM: pollinations primary; kilo fallback (needs KILO_API_KEY).
 name: changelog
 on:
@@ -28,12 +28,9 @@ jobs:
           CHANGELOG_PATH: ${{ inputs.changelog_path }}
         run: |
           if [ ! -f "${CHANGELOG_PATH}" ]; then
-            echo "new=true" >> "$GITHUB_OUTPUT"
             echo "since=" >> "$GITHUB_OUTPUT"
           else
-            # Extract the most recent version date from ## [x.y.z] - YYYY-MM-DD or ## [Unreleased]
             LAST_DATE=$(grep -oP '\d{4}-\d{2}-\d{2}' "${CHANGELOG_PATH}" | head -1 || true)
-            echo "new=false" >> "$GITHUB_OUTPUT"
             echo "since=${LAST_DATE}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -45,24 +42,14 @@ jobs:
           if [ -n "${SINCE}" ]; then
             LOG=$(git log --oneline --no-merges --after="${SINCE} 23:59:59" | head -80)
           else
-            # New changelog: all commits
             LOG=$(git log --oneline --no-merges | head -80)
           fi
-
           if [ -z "${LOG}" ]; then
             echo "empty=true" >> "$GITHUB_OUTPUT"
           else
             echo "empty=false" >> "$GITHUB_OUTPUT"
+            printf 'log<<EOFLOG\n%s\nEOFLOG\n' "${LOG}" >> "$GITHUB_OUTPUT"
           fi
-
-          echo "log<<EOFLOG" >> "$GITHUB_OUTPUT"
-          echo "${LOG}" >> "$GITHUB_OUTPUT"
-          echo "EOFLOG" >> "$GITHUB_OUTPUT"
-
-      - name: Skip if no new commits
-        if: steps.commits.outputs.empty == 'true'
-        run: |
-          echo "No new commits since last changelog entry. Skipping."
 
       - name: Generate changelog section via LLM
         id: section
@@ -70,75 +57,31 @@ jobs:
         env:
           COMMIT_LOG: ${{ steps.commits.outputs.log }}
           REPO: ${{ github.repository }}
-          TODAY: ${{ github.event.head_commit.timestamp }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
         run: |
-          TODAY_DATE=$(date -u +%Y-%m-%d)
-
-          PROMPT="Generate a Keep-a-Changelog (keepachangelog.com) section from these git commits.
-
-          Repo: ${REPO}
-          Date: ${TODAY_DATE}
-
-          Commits:
-          ${COMMIT_LOG}
-
-          Output ONLY this Markdown block (no preamble, no triple backticks):
-          ## [Unreleased] - ${TODAY_DATE}
-          ### Added
-          - <items from feat commits>
-          ### Changed
-          - <items from refactor/perf commits>
-          ### Fixed
-          - <items from fix commits>
-          ### Chore
-          - <items from chore/ci/docs/deps commits>
-
-          Rules:
-          - Omit any section that has no items
-          - Each bullet: imperative present tense, concise, no commit hash
-          - Max 15 bullets total
-          - Group related commits into one bullet
-          - Return ONLY the Markdown section"
-
-          PAYLOAD=$(python3 -c "
-          import json, os
-          print(json.dumps({
-            'model': 'openai',
-            'messages': [{'role': 'user', 'content': os.environ['PROMPT']}],
-            'max_tokens': 500,
-            'temperature': 0.1
-          }))
-          ")
+          TODAY=$(date -u +%Y-%m-%d)
+          PROMPT="Generate a Keep-a-Changelog section. Date: ${TODAY}. Repo: ${REPO}. Format: ## [Unreleased] - ${TODAY} then ### Added / ### Changed / ### Fixed / ### Chore subsections. Omit empty sections. Bullets: imperative present tense, no hash, max 15 total. Return ONLY Markdown. Commits: ${COMMIT_LOG}"
+          printf '%s' "${PROMPT}" > /tmp/llm_prompt.txt
+          PAYLOAD=$(python3 -c "import json,sys; p=open('/tmp/llm_prompt.txt').read(); print(json.dumps({'model':'openai','messages':[{'role':'user','content':p}],'max_tokens':500,'temperature':0.1}))")
 
           RESULT=""
           if [ -n "${KILO_API_KEY}" ]; then
-            RESULT=$(curl -sf --max-time 20 \
-              -X POST "https://api.kilo.ai/api/gateway/v1/chat/completions" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${KILO_API_KEY}" \
-              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null || true)
+            RESULT=$(curl -sf --max-time 20 -X POST "https://api.kilo.ai/api/gateway/v1/chat/completions" \
+              -H "Content-Type: application/json" -H "Authorization: Bearer ${KILO_API_KEY}" \
+              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null) || RESULT=""
           fi
 
           if [ -z "${RESULT}" ]; then
-            RESULT=$(curl -sf --max-time 25 \
-              -X POST "https://text.pollinations.ai/openai" \
-              -H "Content-Type: application/json" \
-              -H "Referer: https://oriz.in" \
-              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null || true)
+            RESULT=$(curl -sf --max-time 25 -X POST "https://text.pollinations.ai/openai" \
+              -H "Content-Type: application/json" -H "Referer: https://oriz.in" \
+              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null) || RESULT=""
           fi
 
-          # Fallback: plain list
           if [ -z "${RESULT}" ]; then
-            TODAY_DATE=$(date -u +%Y-%m-%d)
-            RESULT="## [Unreleased] - ${TODAY_DATE}
-          ### Changed
-          $(echo "${COMMIT_LOG}" | sed 's/^[a-f0-9]* /- /')"
+            RESULT="## [Unreleased] - $(date -u +%Y-%m-%d)"$'\n'"### Changed"$'\n'"$(echo "${COMMIT_LOG}" | sed 's/^[a-f0-9]* /- /')"
           fi
 
-          echo "section<<EOFSEC" >> "$GITHUB_OUTPUT"
-          echo "${RESULT}" >> "$GITHUB_OUTPUT"
-          echo "EOFSEC" >> "$GITHUB_OUTPUT"
+          printf 'section<<EOFSEC\n%s\nEOFSEC\n' "${RESULT}" >> "$GITHUB_OUTPUT"
 
       - name: Write / prepend CHANGELOG.md
         if: steps.commits.outputs.empty != 'true'
@@ -146,39 +89,13 @@ jobs:
           CHANGELOG_PATH: ${{ inputs.changelog_path }}
           NEW_SECTION: ${{ steps.section.outputs.section }}
         run: |
-          HEADER="# Changelog
-
-          All notable changes to this project will be documented in this file.
-          Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-          "
+          printf '%s' "${NEW_SECTION}" > /tmp/new_section.txt
           if [ ! -f "${CHANGELOG_PATH}" ]; then
-            printf '%s\n\n%s\n' "${HEADER}" "${NEW_SECTION}" > "${CHANGELOG_PATH}"
+            printf '# Changelog\n\nAll notable changes documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).\n\n%s\n' "${NEW_SECTION}" > "${CHANGELOG_PATH}"
           else
-            # Prepend new section after header (before first ##)
-            python3 - "${CHANGELOG_PATH}" <<'PYEOF'
-          import sys, os
-          path = sys.argv[1]
-          new_section = os.environ["NEW_SECTION"]
-          with open(path) as f:
-              content = f.read()
-          # Find insertion point: after first line starting with # (title) and blank lines
-          lines = content.split('\n')
-          insert_at = 0
-          for i, line in enumerate(lines):
-              if line.startswith('## '):
-                  insert_at = i
-                  break
-              if line.startswith('# '):
-                  insert_at = i + 1
-          result = '\n'.join(lines[:insert_at]) + '\n\n' + new_section + '\n\n' + '\n'.join(lines[insert_at:])
-          with open(path, 'w') as f:
-              f.write(result)
-          print(f"Inserted section at line {insert_at}")
-          PYEOF
+            python3 -c "import sys,os; p=sys.argv[1]; ns=open('/tmp/new_section.txt').read(); c=open(p).read(); ls=c.split('\n'); i=next((j for j,l in enumerate(ls) if l.startswith('## ')),len(ls)); r='\n'.join(ls[:i]).rstrip()+'\n\n'+ns+'\n\n'+'\n'.join(ls[i:]).lstrip(); open(p,'w').write(r); print('Inserted at line',i)" "${CHANGELOG_PATH}"
           fi
-
-          echo "CHANGELOG.md updated:"
-          head -40 "${CHANGELOG_PATH}"
+          head -30 "${CHANGELOG_PATH}"
 
       - name: Commit CHANGELOG.md
         if: steps.commits.outputs.empty != 'true'
@@ -188,12 +105,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "${CHANGELOG_PATH}"
-          # Only commit if there are staged changes
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: update changelog [skip ci]" \
-              -- "${CHANGELOG_PATH}"
+            git commit -m "chore: update changelog [skip ci]" -- "${CHANGELOG_PATH}"
             git push
             echo "Pushed CHANGELOG.md update."
           fi

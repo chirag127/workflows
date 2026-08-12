@@ -1,5 +1,5 @@
 # Reusable: classify new issues by severity + component, apply labels.
-# Keyless LLM: pollinations (primary) → no key required.
+# Keyless LLM: pollinations (primary) — no key required.
 # Kilo fallback requires KILO_API_KEY secret (optional).
 name: auto-issue-triage
 on:
@@ -25,53 +25,25 @@ jobs:
           COMPONENTS: ${{ inputs.components }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
         run: |
-          PROMPT="Classify this GitHub issue. Return ONLY valid JSON with keys: severity (critical|high|medium|low), component (one of: ${COMPONENTS}), labels (array of strings from: bug, enhancement, documentation, question, wontfix, security, performance, breaking-change).
+          PROMPT="Classify this GitHub issue. Return ONLY valid JSON: {\"severity\":\"critical|high|medium|low\",\"component\":\"one-of-components\",\"labels\":[\"bug|enhancement|documentation|question\"]}. Title: ${ISSUE_TITLE}. Body: ${ISSUE_BODY:-empty}. Components: ${COMPONENTS}. Severity rules: critical=data-loss/security/crash; high=major-feature-broken; medium=degraded+workaround; low=cosmetic/docs. Return JSON only."
+          printf '%s' "${PROMPT}" > /tmp/llm_prompt.txt
+          PAYLOAD=$(python3 -c "import json,sys; p=open('/tmp/llm_prompt.txt').read(); print(json.dumps({'model':'openai','messages':[{'role':'user','content':p}],'max_tokens':200,'temperature':0}))")
 
-          Title: ${ISSUE_TITLE}
-          Body: ${ISSUE_BODY:-'(empty)'}
-
-          Rules:
-          - critical: data loss, security vuln, crash on start
-          - high: major feature broken, no workaround
-          - medium: degraded feature, has workaround
-          - low: cosmetic, docs, minor
-          - component: pick closest match from the provided list
-          - labels: 1-3 labels, always include at least one of bug/enhancement/documentation/question
-
-          Return JSON only, no markdown, no explanation."
-
-          PAYLOAD=$(python3 -c "
-          import json, os
-          print(json.dumps({
-            'model': 'openai',
-            'messages': [{'role': 'user', 'content': os.environ['PROMPT']}],
-            'max_tokens': 200,
-            'temperature': 0
-          }))
-          ")
-
-          # Try kilo first if key present
           RESULT=""
           if [ -n "${KILO_API_KEY}" ]; then
-            RESULT=$(curl -sf --max-time 15 \
-              -X POST "https://api.kilo.ai/api/gateway/v1/chat/completions" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${KILO_API_KEY}" \
-              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null || true)
+            RESULT=$(curl -sf --max-time 15 -X POST "https://api.kilo.ai/api/gateway/v1/chat/completions" \
+              -H "Content-Type: application/json" -H "Authorization: Bearer ${KILO_API_KEY}" \
+              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null) || RESULT=""
           fi
 
-          # Fallback: pollinations (keyless)
           if [ -z "${RESULT}" ]; then
-            RESULT=$(curl -sf --max-time 20 \
-              -X POST "https://text.pollinations.ai/openai" \
-              -H "Content-Type: application/json" \
-              -H "Referer: https://oriz.in" \
-              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null || true)
+            RESULT=$(curl -sf --max-time 20 -X POST "https://text.pollinations.ai/openai" \
+              -H "Content-Type: application/json" -H "Referer: https://oriz.in" \
+              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null) || RESULT=""
           fi
 
           echo "LLM raw: ${RESULT}"
 
-          # Parse JSON; fall back to defaults on parse failure
           SEVERITY=$(echo "${RESULT}" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('severity','medium'))" 2>/dev/null || echo "medium")
           COMPONENT=$(echo "${RESULT}" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(d.get('component','core'))" 2>/dev/null || echo "core")
           LABELS=$(echo "${RESULT}" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); print(','.join(d.get('labels',['question'])))" 2>/dev/null || echo "question")
@@ -92,8 +64,7 @@ jobs:
             ["severity: low"]="84cc16"
           )
           for label in "${!COLORS[@]}"; do
-            color="${COLORS[$label]}"
-            gh label create "${label}" --color "${color}" --repo "${REPO}" 2>/dev/null || true
+            gh label create "${label}" --color "${COLORS[$label]}" --repo "${REPO}" 2>/dev/null || true
           done
 
       - name: Ensure component label exists
@@ -113,16 +84,14 @@ jobs:
           COMPONENT: ${{ steps.classify.outputs.component }}
           EXTRA_LABELS: ${{ steps.classify.outputs.labels }}
         run: |
-          # Build label list: severity + component + extra
           ALL_LABELS="severity: ${SEVERITY},component: ${COMPONENT}"
           if [ -n "${EXTRA_LABELS}" ]; then
-            # Ensure extra labels exist (best-effort create)
             IFS=',' read -ra LBLS <<< "${EXTRA_LABELS}"
             for lbl in "${LBLS[@]}"; do
-              lbl=$(echo "$lbl" | xargs)  # trim whitespace
+              lbl=$(echo "$lbl" | xargs)
               gh label create "${lbl}" --color "6e7781" --repo "${REPO}" 2>/dev/null || true
               ALL_LABELS="${ALL_LABELS},${lbl}"
             done
           fi
           gh issue edit "${ISSUE_NUMBER}" --add-label "${ALL_LABELS}" --repo "${REPO}"
-          echo "Applied labels: ${ALL_LABELS} to issue #${ISSUE_NUMBER}"
+          echo "Applied: ${ALL_LABELS} to #${ISSUE_NUMBER}"
