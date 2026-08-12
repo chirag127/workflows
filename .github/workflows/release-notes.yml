@@ -1,0 +1,127 @@
+# Reusable: generate release notes from commits+PRs since last tag.
+# Groups into Features / Fixes / Chore. Updates the release body via gh.
+# Keyless LLM: pollinations primary; kilo fallback (needs KILO_API_KEY).
+name: release-notes
+on:
+  workflow_call:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gather commits since last tag
+        id: commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Find previous tag (tag before current)
+          CURRENT_TAG="${TAG}"
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${CURRENT_TAG}$" | head -1 || true)
+
+          if [ -z "${PREV_TAG}" ]; then
+            # No previous tag — use all commits
+            LOG=$(git log --oneline --no-merges | head -60)
+          else
+            LOG=$(git log "${PREV_TAG}..HEAD" --oneline --no-merges | head -60)
+          fi
+
+          echo "prev_tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+          # Escape for env output (replace % and newlines)
+          ESCAPED=$(echo "${LOG}" | python3 -c "import sys; print(sys.stdin.read().replace('%','%%'))" 2>/dev/null || echo "${LOG}")
+          echo "log<<EOFLOG" >> "$GITHUB_OUTPUT"
+          echo "${LOG}" >> "$GITHUB_OUTPUT"
+          echo "EOFLOG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate notes via LLM
+        id: notes
+        env:
+          COMMIT_LOG: ${{ steps.commits.outputs.log }}
+          TAG: ${{ github.event.release.tag_name }}
+          PREV_TAG: ${{ steps.commits.outputs.prev_tag }}
+          REPO: ${{ github.repository }}
+          KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
+        run: |
+          PROMPT="Generate GitHub release notes from these git commits (conventional-commit format).
+
+          Release: ${TAG} (previous: ${PREV_TAG:-'first release'})
+          Repo: ${REPO}
+
+          Commits:
+          ${COMMIT_LOG}
+
+          Format the output as Markdown with exactly these sections (omit a section if no commits fit):
+          ## What's Changed
+          ### Features
+          - <item>
+          ### Fixes
+          - <item>
+          ### Chore / Deps
+          - <item>
+
+          Rules:
+          - feat/feat! → Features
+          - fix/perf/revert → Fixes
+          - chore/ci/docs/build/refactor/test/style → Chore / Deps
+          - Each bullet: concise action phrase, no commit hash
+          - Max 20 bullets total
+          - If commits are sparse, write 1 summary bullet per section
+          - Return ONLY the Markdown, no preamble"
+
+          PAYLOAD=$(python3 -c "
+          import json, os
+          print(json.dumps({
+            'model': 'openai',
+            'messages': [{'role': 'user', 'content': os.environ['PROMPT']}],
+            'max_tokens': 600,
+            'temperature': 0.2
+          }))
+          ")
+
+          RESULT=""
+          if [ -n "${KILO_API_KEY}" ]; then
+            RESULT=$(curl -sf --max-time 20 \
+              -X POST "https://api.kilo.ai/api/gateway/v1/chat/completions" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${KILO_API_KEY}" \
+              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null || true)
+          fi
+
+          if [ -z "${RESULT}" ]; then
+            RESULT=$(curl -sf --max-time 25 \
+              -X POST "https://text.pollinations.ai/openai" \
+              -H "Content-Type: application/json" \
+              -H "Referer: https://oriz.in" \
+              -d "${PAYLOAD}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['choices'][0]['message']['content'].strip())" 2>/dev/null || true)
+          fi
+
+          # Final fallback: plain commit list
+          if [ -z "${RESULT}" ]; then
+            RESULT="## What's Changed
+          ${COMMIT_LOG}"
+          fi
+
+          echo "Generated notes:"
+          echo "${RESULT}"
+
+          echo "body<<EOFBODY" >> "$GITHUB_OUTPUT"
+          echo "${RESULT}" >> "$GITHUB_OUTPUT"
+          echo "EOFBODY" >> "$GITHUB_OUTPUT"
+
+      - name: Update release body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+          BODY: ${{ steps.notes.outputs.body }}
+        run: |
+          gh release edit "${TAG}" --notes "${BODY}" --repo "${REPO}"
+          echo "Updated release ${TAG} notes."
