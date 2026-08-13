@@ -1,8 +1,0 @@
-{
-  "name": "data-scrape-api",
-  "engineVersion": "v0.21.8",
-  "sdk": {
-    "source": "typescript"
-  },
-  "source": "."
-}

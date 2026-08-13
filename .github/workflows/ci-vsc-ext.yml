@@ -1,6 +1,9 @@
-# Thin Dagger adapter — VS Code extensions (sops-lens-vsc-ext).
+# Pure GitHub Actions — VS Code extensions (sops-lens-vsc-ext).
 # Downstream: uses: chirag127/workflows/.github/workflows/ci-vsc-ext.yml@main
-# Cache: cacheVolume("pnpm-store") wired inside dagger/vsc-ext module.
+# Replaces the dead Dagger engine (registry.dagger.io/engine:v0.21.8) with native steps.
+# Mirrors dagger/vsc-ext: pnpm install (ignore-scripts) -> lint + typecheck (--if-present)
+#   -> build (runs `build` then `compile` if present — some VS Code exts use tsc-native `compile`).
+# pnpm store cached (was cacheVolume("pnpm-store")). Package/publish stay umbrella-only, not part of ci().
 name: ci-vsc-ext
 on:
   workflow_call:
@@ -11,8 +14,18 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dagger/dagger-for-github@v8.4.1
+      - uses: pnpm/action-setup@v6
         with:
-          version: latest
-          module: github.com/chirag127/workflows/dagger/vsc-ext@main
-          call: ci --source=.
+          version: 10.34.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Lint
+        run: pnpm run --if-present lint
+      - name: Typecheck
+        run: pnpm run --if-present typecheck
+      - name: Build
+        run: pnpm run --if-present build && pnpm run --if-present compile

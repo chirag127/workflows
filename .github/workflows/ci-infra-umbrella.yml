@@ -1,3 +1,8 @@
+# Pure GitHub Actions — workspace umbrella + infra-adjacent repos (hermes-config, agent-skills).
+# Downstream: uses: chirag127/workflows/.github/workflows/ci-infra-umbrella.yml@main
+# Replaces the dead Dagger engine (registry.dagger.io/engine:v0.21.8) with native steps.
+# Mirrors dagger/infra-umbrella: validate .mcp.json parses, .env.example mirrors .env,
+#   and knowledge/**.md OKF frontmatter has a type: field. jq is preinstalled on ubuntu-latest.
 name: ci-infra-umbrella
 on:
   workflow_call:
@@ -8,8 +13,53 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dagger/dagger-for-github@v8.4.1
-        with:
-          version: latest
-          module: github.com/chirag127/workflows/dagger/infra-umbrella@main
-          call: ci --source=.
+      - name: .mcp.json parses
+        run: |
+          set -e
+          if [ ! -f .mcp.json ]; then
+            echo "skip: no .mcp.json"
+            exit 0
+          fi
+          jq empty .mcp.json
+          echo "OK — .mcp.json parses"
+      - name: .env.example mirrors .env
+        shell: bash
+        run: |
+          set -e
+          if [ ! -f .env.example ]; then
+            echo "skip: no .env.example"
+            exit 0
+          fi
+          if [ -f .env ]; then
+            ENV_KEYS=$(grep -oE '^[A-Z_][A-Z0-9_]*=' .env 2>/dev/null | sort -u | tr -d '=')
+            EX_KEYS=$(grep -oE '^[A-Z_][A-Z0-9_]*=' .env.example 2>/dev/null | sort -u | tr -d '=')
+            MISSING=$(comm -23 <(echo "$ENV_KEYS") <(echo "$EX_KEYS") | head -5)
+            if [ -n "$MISSING" ]; then
+              echo "MISSING in .env.example: $MISSING"
+              exit 1
+            fi
+          fi
+          echo "OK — .env.example mirrors .env"
+      - name: OKF frontmatter valid
+        run: |
+          set -e
+          if [ ! -d knowledge ]; then
+            echo "skip: no knowledge/ dir"
+            exit 0
+          fi
+          BAD=0
+          for f in $(find knowledge -name '*.md' -not -name 'index.md' -not -name '_*.md' 2>/dev/null | head -200); do
+            FIRST=$(head -1 "$f")
+            if [ "$FIRST" != "---" ]; then
+              continue
+            fi
+            if ! head -20 "$f" | grep -q '^type:'; then
+              echo "MISSING type: field in $f"
+              BAD=$((BAD + 1))
+            fi
+          done
+          if [ "$BAD" -gt 0 ]; then
+            echo "Found $BAD files with malformed OKF frontmatter"
+            exit 1
+          fi
+          echo "OK — OKF frontmatter valid"

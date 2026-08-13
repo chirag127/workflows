@@ -1,9 +1,13 @@
-# Thin Dagger adapter — mdBook books (janaushdhi-book).
+# Pure GitHub Actions — mdBook books (janaushdhi-book).
 # Downstream: uses: chirag127/workflows/.github/workflows/ci-mdbook.yml@main
-# Cache: cacheVolume("cargo-registry") wired inside dagger/mdbook module.
+# Replaces the dead Dagger engine (registry.dagger.io/engine:v0.21.8) with native steps.
+# Mirrors dagger/mdbook: skip gracefully when no book.toml, else `mdbook test` (lint) + `mdbook build`.
+# Uses the prebuilt mdbook v0.4.40 release binary (no cargo build / cargo-registry cache needed).
 name: ci-mdbook
 on:
   workflow_call:
+env:
+  MDBOOK_VERSION: "0.4.40"
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -11,8 +15,18 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dagger/dagger-for-github@v8.4.1
-        with:
-          version: latest
-          module: github.com/chirag127/workflows/dagger/mdbook@main
-          call: ci --source=.
+      - name: Install mdbook
+        run: |
+          set -e
+          url="https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfL "$url" | tar -xz
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Build book
+        run: |
+          set -e
+          if [ ! -f book.toml ]; then
+            echo "skip: non-standard layout (no book.toml) — see repo's Build Book workflow"
+            exit 0
+          fi
+          ./mdbook test
+          ./mdbook build

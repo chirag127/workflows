@@ -1,6 +1,8 @@
-# Thin Dagger adapter — Astro static APIs (constants, countries-plus, dynasties, ragas, rto, mmi-tickertape).
+# Pure GitHub Actions — Astro static APIs (constants, countries-plus, dynasties, ragas, rto, mmi-tickertape).
 # Downstream: uses: chirag127/workflows/.github/workflows/ci-astro-api.yml@v1
-# Cache: cacheVolume("pnpm-store") wired inside dagger/astro-api module.
+# Replaces the dead Dagger engine (registry.dagger.io/engine:v0.21.8) with native steps.
+# Mirrors dagger/astro-api: pnpm install (ignore-scripts) -> lint + typecheck (--if-present) -> build (required).
+# pnpm store cached (was cacheVolume("pnpm-store")). No tests (API repos are data-first).
 name: ci-astro-api
 on:
   workflow_call:
@@ -16,11 +18,21 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: dagger/dagger-for-github@v8.4.1
+      - uses: pnpm/action-setup@v6
         with:
-          version: latest
-          module: github.com/chirag127/workflows/dagger/astro-api@main
-          call: ci --source=.
+          version: 10.34.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Lint
+        run: pnpm run --if-present lint
+      - name: Typecheck
+        run: pnpm run --if-present typecheck
+      - name: Build
+        run: pnpm run build
 
   strix:
     runs-on: ubuntu-latest

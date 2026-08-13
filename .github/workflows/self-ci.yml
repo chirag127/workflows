@@ -1,4 +1,6 @@
-# Validates this repo itself: every dagger.json is well-formed + actionlint on all workflows.
+# Validates this repo itself: dagger.json schema for the remaining Dagger modules,
+# the docs site generates, and actionlint passes on every workflow.
+# Pure GitHub Actions — no Dagger engine is pulled here (the dead registry engine is gone).
 # Does NOT touch dagger/*/sdk/ (generated codegen).
 name: self-ci
 on:
@@ -20,30 +22,31 @@ jobs:
           node-version: 22
       - name: Validate every dagger.json (schema + name matches dir)
         run: |
+          cat > /tmp/validate-dagger.mjs <<'NODE'
+          import fs from "node:fs";
+          const [f, dir] = process.argv.slice(2);
+          const j = JSON.parse(fs.readFileSync(f, "utf8"));
+          const req = ["name", "engineVersion", "sdk", "source"];
+          for (const k of req) {
+            if (!(k in j)) {
+              console.error(`${f}: missing "${k}"`);
+              process.exit(1);
+            }
+          }
+          if (j.name !== dir) {
+            console.error(`${f}: name "${j.name}" != dir "${dir}"`);
+            process.exit(1);
+          }
+          if (!j.sdk || j.sdk.source !== "typescript") {
+            console.error(`${f}: sdk.source must be "typescript"`);
+            process.exit(1);
+          }
+          console.log(`ok  ${f}`);
+          NODE
           fail=0
           for f in dagger/*/dagger.json; do
             dir=$(basename "$(dirname "$f")")
-            node - "$f" "$dir" <<'NODE' || fail=1
-              const fs = require("fs");
-              const [f, dir] = process.argv.slice(2);
-              const j = JSON.parse(fs.readFileSync(f, "utf8"));
-              const req = ["name", "engineVersion", "sdk", "source"];
-              for (const k of req) {
-                if (!(k in j)) {
-                  console.error(`${f}: missing "${k}"`);
-                  process.exit(1);
-                }
-              }
-              if (j.name !== dir) {
-                console.error(`${f}: name "${j.name}" != dir "${dir}"`);
-                process.exit(1);
-              }
-              if (!j.sdk || j.sdk.source !== "typescript") {
-                console.error(`${f}: sdk.source must be "typescript"`);
-                process.exit(1);
-              }
-              console.log(`ok  ${f}`);
-          NODE
+            node /tmp/validate-dagger.mjs "$f" "$dir" || fail=1
           done
           exit "$fail"
 
@@ -64,6 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run actionlint
-        run: |
-          bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash)
-          ./actionlint -color
+        uses: reviewdog/action-actionlint@v1
+        with:
+          reporter: github-check
+          fail_level: error
