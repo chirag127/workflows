@@ -47,7 +47,7 @@ jobs:
       CLASS: ${{ github.event.client_payload.class || github.event.inputs.class }}
     steps:
       - name: Checkout umbrella (submodules included)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: chirag127/workspace
           token: ${{ secrets.SYNC_TOKEN }}
