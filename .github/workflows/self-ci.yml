@@ -66,8 +66,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install actionlint
+        run: |
+          curl -sSfL -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
       - name: Run actionlint
-        uses: reviewdog/action-actionlint@v1
-        with:
-          reporter: github-check
-          fail_level: error
+        run: /tmp/actionlint -color -shellcheck=

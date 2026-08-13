@@ -21,7 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       - name: Install deps (if package.json)
         run: 'if [ -f package.json ]; then pnpm install --no-frozen-lockfile --ignore-scripts; fi'
       - name: Lint (advisory)
