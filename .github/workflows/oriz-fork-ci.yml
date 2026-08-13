@@ -110,7 +110,7 @@ jobs:
 
       - name: Post status pending
         if: steps.gate.outputs.skip != 'true' && steps.sha.outputs.sha != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           FORK_REPO: ${{ steps.paths.outputs.repo }}
           SHA: ${{ steps.sha.outputs.sha }}
@@ -141,7 +141,7 @@ jobs:
 
       - name: Post status final
         if: always() && steps.gate.outputs.skip != 'true' && steps.sha.outputs.sha != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           FORK_REPO: ${{ steps.paths.outputs.repo }}
           SHA: ${{ steps.sha.outputs.sha }}
